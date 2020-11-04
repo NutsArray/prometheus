@@ -187,15 +187,15 @@ func nodeLabels(n *apiv1.Node) model.LabelSet {
 	return ls
 }
 
-func labelIsMatch(labels []CustomPortSelectorConfig, labelSet model.LabelSet) bool {
+func labelIsMatch(labels []CustomPortSelectorConfig, labelSet map[string]string) bool {
 	if len(labels) == 0 || len(labelSet) == 0 {
 		return false
 	}
 	var ok bool
-	var field model.LabelValue
+	var field string
 	for _, label := range labels {
-		if field, ok = labelSet[model.LabelName(label.Label)]; ok {
-			if field == model.LabelValue(label.Field) {
+		if field, ok = labelSet[label.Label]; ok {
+			if field == label.Field {
 				return true
 			}
 		}
