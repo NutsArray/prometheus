@@ -40,20 +40,31 @@ var (
 	nodeDeleteCount = eventCount.WithLabelValues("node", "delete")
 )
 
+type CustomPortSelectorConfig struct {
+	Label string `yaml:"label,omitempty"`
+	Field string `yaml:"field,omitempty"`
+}
+
+type CustomPort struct {
+	KubeletPort         int                        `yaml:"kubelet_port,omitempty"`
+	CustomPortSelectors []CustomPortSelectorConfig `yaml:"custom_port_selectors,omitempty"`
+}
+
 // Node discovers Kubernetes nodes.
 type Node struct {
-	logger   log.Logger
-	informer cache.SharedInformer
-	store    cache.Store
-	queue    *workqueue.Type
+	logger     log.Logger
+	informer   cache.SharedInformer
+	store      cache.Store
+	queue      *workqueue.Type
+	customPort CustomPort
 }
 
 // NewNode returns a new node discovery.
-func NewNode(l log.Logger, inf cache.SharedInformer) *Node {
+func NewNode(l log.Logger, inf cache.SharedInformer, customPort CustomPort) *Node {
 	if l == nil {
 		l = log.NewNopLogger()
 	}
-	n := &Node{logger: l, informer: inf, store: inf.GetStore(), queue: workqueue.NewNamed("node")}
+	n := &Node{logger: l, informer: inf, store: inf.GetStore(), queue: workqueue.NewNamed("node"), customPort: customPort}
 	n.informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(o interface{}) {
 			nodeAddCount.Inc()
@@ -176,6 +187,22 @@ func nodeLabels(n *apiv1.Node) model.LabelSet {
 	return ls
 }
 
+func labelIsMatch(labels []CustomPortSelectorConfig, labelSet model.LabelSet) bool {
+	if len(labels) == 0 || len(labelSet) == 0 {
+		return false
+	}
+	var ok bool
+	var field model.LabelValue
+	for _, label := range labels {
+		if field, ok = labelSet[model.LabelName(label.Label)]; ok {
+			if field == model.LabelValue(label.Field) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (n *Node) buildNode(node *apiv1.Node) *targetgroup.Group {
 	tg := &targetgroup.Group{
 		Source: nodeSource(node),
@@ -187,7 +214,13 @@ func (n *Node) buildNode(node *apiv1.Node) *targetgroup.Group {
 		level.Warn(n.logger).Log("msg", "No node address found", "err", err)
 		return nil
 	}
-	addr = net.JoinHostPort(addr, strconv.FormatInt(int64(node.Status.DaemonEndpoints.KubeletEndpoint.Port), 10))
+
+	port := int64(node.Status.DaemonEndpoints.KubeletEndpoint.Port)
+	if n.customPort.KubeletPort > 0 && labelIsMatch(n.customPort.CustomPortSelectors, tg.Labels) {
+		port = int64(n.customPort.KubeletPort)
+	}
+
+	addr = net.JoinHostPort(addr, strconv.FormatInt(port, 10))
 
 	t := model.LabelSet{
 		model.AddressLabel:  lv(addr),

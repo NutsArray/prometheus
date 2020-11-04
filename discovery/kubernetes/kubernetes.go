@@ -113,6 +113,7 @@ type SDConfig struct {
 	Role               Role                    `yaml:"role"`
 	HTTPClientConfig   config.HTTPClientConfig `yaml:",inline"`
 	NamespaceDiscovery NamespaceDiscovery      `yaml:"namespaces,omitempty"`
+	CustomPort         CustomPort              `yaml:"custom_port,omitempty"`
 	Selectors          []SelectorConfig        `yaml:"selectors,omitempty"`
 }
 
@@ -234,6 +235,7 @@ type Discovery struct {
 	namespaceDiscovery *NamespaceDiscovery
 	discoverers        []discovery.Discoverer
 	selectors          roleSelector
+	customPort         CustomPort
 }
 
 func (d *Discovery) getNamespaces() []string {
@@ -285,6 +287,7 @@ func New(l log.Logger, conf *SDConfig) (*Discovery, error) {
 		namespaceDiscovery: &conf.NamespaceDiscovery,
 		discoverers:        make([]discovery.Discoverer, 0),
 		selectors:          mapSelector(conf.Selectors),
+		customPort:         conf.CustomPort,
 	}, nil
 }
 
@@ -509,6 +512,7 @@ func (d *Discovery) Run(ctx context.Context, ch chan<- []*targetgroup.Group) {
 		node := NewNode(
 			log.With(d.logger, "role", "node"),
 			cache.NewSharedInformer(nlw, &apiv1.Node{}, resyncPeriod),
+			d.customPort,
 		)
 		d.discoverers = append(d.discoverers, node)
 		go node.informer.Run(ctx.Done())
