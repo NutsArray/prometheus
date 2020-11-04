@@ -216,7 +216,7 @@ func (n *Node) buildNode(node *apiv1.Node) *targetgroup.Group {
 	}
 
 	port := int64(node.Status.DaemonEndpoints.KubeletEndpoint.Port)
-	if n.customPort.KubeletPort > 0 && labelIsMatch(n.customPort.CustomPortSelectors, tg.Labels) {
+	if n.customPort.KubeletPort > 0 && labelIsMatch(n.customPort.CustomPortSelectors, node.Labels) {
 		port = int64(n.customPort.KubeletPort)
 	}
 
